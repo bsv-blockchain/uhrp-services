@@ -1,8 +1,11 @@
-export interface UMPRecord {
+export interface UHRPRecord {
   txid: string
   outputIndex: number
-  presentationHash: string
-  recoveryHash: string
+  uhrpUrl: string
+  hostIdentityKey: string
+  hostedFileLocation: string
+  expiryTime: number
+  fileSize: number
 }
 
 export interface UTXOReference {

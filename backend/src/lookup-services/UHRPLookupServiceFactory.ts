@@ -1,27 +1,27 @@
 import { LookupService } from '@bsv/overlay'
-import { Script, PushDrop, Utils } from '@bsv/sdk'
-import { UMPRecord, UTXOReference } from '../types.js'
+import { Script, PushDrop, Utils, StorageUtils } from '@bsv/sdk'
+import { UHRPRecord, UTXOReference } from '../types.js'
 import { Db, Collection } from 'mongodb'
-import umpLookupDocs from './UMPLookupDocs.md.js'
+import uhrpLookupDocs from './UHRPLookupDocs.md.js'
 
 /**
- * Implements a Lookup Service for the User Management Protocol
+ * Implements a Lookup Service for the Universal Hash Resolution Protocol
  */
-class UMPLookupService implements LookupService {
-  records: Collection<UMPRecord>
+class UHRPLookupService implements LookupService {
+  records: Collection<UHRPRecord>
 
   constructor(db: Db) {
-    this.records = db.collection<UMPRecord>('ump')
+    this.records = db.collection<UHRPRecord>('uhrp')
   }
 
   async getDocumentation(): Promise<string> {
-    return umpLookupDocs
+    return uhrpLookupDocs
   }
 
   async getMetaData(): Promise<{ name: string; shortDescription: string; iconURL?: string; version?: string; informationURL?: string }> {
     return {
-      name: 'UMP Lookup Service',
-      shortDescription: 'Lookup Service for User Management Protocol tokens'
+      name: 'UHRP Lookup Service',
+      shortDescription: 'Lookup Service for User file hosting commitment tokens'
     }
   }
 
@@ -34,20 +34,26 @@ class UMPLookupService implements LookupService {
    * @returns {string} indicating the success status
    */
   async outputAdded(txid: string, outputIndex: number, outputScript: Script, topic: string) {
-    if (topic !== 'tm_users') return
-    // Decode the UMP fields from the Bitcoin outputScript
+    if (topic !== 'tm_uhrp') return
+    // Decode the UHRP fields from the Bitcoin outputScript
     const result = PushDrop.decode(outputScript)
 
-    // UMP Account Fields to store (from the UMP protocol's PushDrop field order)
-    const presentationHash = Utils.toHex(result.fields[6])
-    const recoveryHash = Utils.toHex(result.fields[7])
+    // UHRP advertisement Fields to store (from the UHRP protocol's PushDrop field order)
+    const hostIdentityKey = Utils.toHex(result.fields[0])
+    const uhrpUrl = StorageUtils.getURLForHash(result.fields[1])
+    const hostedFileLocation = Utils.toUTF8(result.fields[2])
+    const expiryTime = new Utils.Reader(result.fields[3]).readVarIntNum()
+    const fileSize = new Utils.Reader(result.fields[4]).readVarIntNum()
 
-    // Store UMP fields in db
+    // Store UHRP fields in db
     await this.records.insertOne({
+      uhrpUrl,
       txid,
       outputIndex,
-      presentationHash,
-      recoveryHash
+      hostIdentityKey,
+      hostedFileLocation,
+      expiryTime,
+      fileSize
     })
   }
 
@@ -60,7 +66,7 @@ class UMPLookupService implements LookupService {
    * @returns
    */
   async outputSpent(txid: string, outputIndex: number, topic: string) {
-    if (topic !== 'tm_users') return
+    if (topic !== 'tm_uhrp') return
     await this.records.deleteOne({ txid, outputIndex })
   }
 
@@ -72,26 +78,24 @@ class UMPLookupService implements LookupService {
    */
   async lookup({ query }: any): Promise<UTXOReference[]> {
     // Validate Query
-    if (!query) {
+    if (typeof query !== 'object') {
       throw new Error('Lookup must include a valid query!')
     }
-    if (query.presentationHash) {
-      const result = await this.records.findOne({ presentationHash: query.presentationHash })
-      if (!result) return []
-      return [{ txid: result.txid, outputIndex: result.outputIndex }]
-    } else if (query.recoveryHash) {
-      const result = await this.records.findOne({ recoveryHash: query.recoveryHash })
-      if (!result) return []
-      return [{ txid: result.txid, outputIndex: result.outputIndex }]
-    } else if (query.outpoint) {
+    if (query.outpoint) {
       const [txid, outputIndex] = (query.outpoint as string).split('.')
       const result = await this.records.findOne({ txid, outputIndex: Number(outputIndex) })
       if (!result) return []
       return [{ txid: result.txid, outputIndex: result.outputIndex }]
-    } else {
-      throw new Error('Query parameters must include presentationHash, recoveryHash, or outpoint!')
     }
+    if (!query.uhrpUrl && !query.expiryTime && !query.hostIdentityKey) {
+      throw new Error('Lookup must specify either outpoint, or at least one of (uhrpUrl, expiryTime, hostIdentityKey)')
+    }
+    const result = await this.records.find(query).toArray()
+    return result.map(x => ({
+      txid: x.txid,
+      outputIndex: x.outputIndex
+    }))
   }
 }
 
-export default (db: Db) => new UMPLookupService(db);
+export default (db: Db) => new UHRPLookupService(db);
