@@ -23,7 +23,7 @@
       "name": "babbage",
       "provider": "CARS",
       "CARSCloudURL": "https://cars.babbage.systems",
-      "projectID": "2efa4b8fe4c2bd42083636871b007e9e",
+      "projectID": "e40be69a5b6200a8f2b23758f2174093",
       "network": "mainnet",
       "deploy": [
         "backend"
@@ -33,7 +33,7 @@
       "name": "Babbage testnet",
       "provider": "CARS",
       "CARSCloudURL": "https://cars.babbage.systems",
-      "projectID": "905e31b7e0e335dc15d702b444b3287b",
+      "projectID": "6dd4b0fd24e1b48f792d35d740d9c01a",
       "network": "testnet",
       "deploy": [
         "backend"
