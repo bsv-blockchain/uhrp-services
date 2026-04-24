@@ -293,3 +293,4 @@ frontend/build
 backend/node_modules
 backend/dist
 local-data/
+cars_tmp*
