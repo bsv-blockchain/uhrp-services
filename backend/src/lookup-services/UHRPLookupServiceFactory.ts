@@ -41,16 +41,22 @@ class UHRPLookupService implements LookupService {
     const expiryTime = new Utils.Reader(result.fields[3]).readVarIntNum()
     const fileSize = new Utils.Reader(result.fields[4]).readVarIntNum()
 
-    // Store UHRP fields in db
-    await this.records.insertOne({
-      uhrpUrl,
-      txid,
-      outputIndex,
-      hostIdentityKey,
-      hostedFileLocation,
-      expiryTime,
-      fileSize
-    })
+    // Store UHRP fields idempotently. Overlay submissions can be retried by
+    // multiple SHIP peers, so a repeated admission must not create duplicate
+    // public locations.
+    await this.records.updateOne(
+      { txid, outputIndex },
+      {
+        $set: {
+          uhrpUrl,
+          hostIdentityKey,
+          hostedFileLocation,
+          expiryTime,
+          fileSize
+        }
+      },
+      { upsert: true }
+    )
   }
 
   async outputSpent(payload: OutputSpent) {
@@ -71,14 +77,23 @@ class UHRPLookupService implements LookupService {
     }
     if (query.outpoint) {
       const [txid, outputIndex] = (query.outpoint as string).split('.')
-      const result = await this.records.findOne({ txid, outputIndex: Number(outputIndex) })
+      const result = await this.records.findOne({
+        txid,
+        outputIndex: Number(outputIndex),
+        expiryTime: { $gt: Math.floor(Date.now() / 1000) }
+      })
       if (!result) return []
       return [{ txid: result.txid, outputIndex: result.outputIndex }]
     }
     if (!query.uhrpUrl && !query.expiryTime && !query.hostIdentityKey) {
       throw new Error('Lookup must specify either outpoint, or at least one of (uhrpUrl, expiryTime, hostIdentityKey)')
     }
-    const result = await this.records.find(query).toArray()
+    const result = await this.records.find({
+      $and: [
+        query,
+        { expiryTime: { $gt: Math.floor(Date.now() / 1000) } }
+      ]
+    }).toArray()
     return result.map(x => ({
       txid: x.txid,
       outputIndex: x.outputIndex

@@ -52,7 +52,7 @@ export default class UHRPTopicManager implements TopicManager {
           }
           const expiryTime = new Utils.Reader(result.fields[3]).readVarIntNum()
           const fileSize = new Utils.Reader(result.fields[4]).readVarIntNum()
-          if (expiryTime < 1 || fileSize < 1) {
+          if (expiryTime <= Math.floor(Date.now() / 1000) || fileSize < 1) {
             throw new Error('Invalid expiry time or file size')
           }
           outputs.push(i)
