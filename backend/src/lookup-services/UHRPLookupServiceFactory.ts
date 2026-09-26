@@ -70,35 +70,54 @@ class UHRPLookupService implements LookupService {
     await this.records.deleteOne({ txid, outputIndex })
   }
 
-  async lookup({ query }: any): Promise<UTXOReference[]> {
-    // Validate Query
-    if (typeof query !== 'object') {
-      throw new Error('Lookup must include a valid query!')
-    }
-    if (query.outpoint) {
-      const [txid, outputIndex] = (query.outpoint as string).split('.')
-      const result = await this.records.findOne({
-        txid,
-        outputIndex: Number(outputIndex),
-        expiryTime: { $gt: Math.floor(Date.now() / 1000) }
-      })
-      if (!result) return []
-      return [{ txid: result.txid, outputIndex: result.outputIndex }]
-    }
-    if (!query.uhrpUrl && !query.expiryTime && !query.hostIdentityKey) {
-      throw new Error('Lookup must specify either outpoint, or at least one of (uhrpUrl, expiryTime, hostIdentityKey)')
-    }
+  async lookup({ query }: { query: unknown }): Promise<UTXOReference[]> {
+    const { filter, limit, offset } = normalizeLookupQuery(query)
     const result = await this.records.find({
-      $and: [
-        query,
-        { expiryTime: { $gt: Math.floor(Date.now() / 1000) } }
-      ]
-    }).toArray()
-    return result.map(x => ({
-      txid: x.txid,
-      outputIndex: x.outputIndex
-    }))
+      $and: [filter, { expiryTime: { $gt: Math.floor(Date.now() / 1000) } }]
+    }).sort({ txid: 1, outputIndex: 1 }).skip(offset).limit(limit).toArray()
+    return result.map(x => ({ txid: x.txid, outputIndex: x.outputIndex }))
   }
+
 }
 
 export default (db: Db) => new UHRPLookupService(db);
+
+/** Pagination controls are not persisted advertisement fields. */
+function normalizeLookupQuery(value: unknown): { filter: Record<string, unknown>; limit: number; offset: number } {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) throw new Error('Lookup requires an object query')
+  const query = value as Record<string, unknown>
+  const allowed = new Set(['outpoint', 'uhrpUrl', 'expiryTime', 'hostIdentityKey', 'limit', 'offset'])
+  if (Object.keys(query).some(key => !allowed.has(key))) throw new Error('Unsupported lookup query field')
+  const limit = query.limit ?? 200
+  const offset = query.offset ?? 0
+  if (typeof limit !== 'number' || !Number.isSafeInteger(limit) || limit < 1 || limit > 200 ||
+      typeof offset !== 'number' || !Number.isSafeInteger(offset) || offset < 0 || offset > 1_000_000) {
+    throw new Error('Invalid lookup pagination')
+  }
+  const filter = lookupSelectors(query)
+  return { filter, limit, offset }
+}
+
+function lookupSelectors(query: Record<string, unknown>): Record<string, unknown> {
+  if (query.outpoint !== undefined) {
+    if (typeof query.outpoint !== 'string') throw new Error('Invalid lookup outpoint')
+    const match = /^([0-9a-f]{64})\.(0|[1-9]\d*)$/.exec(query.outpoint)
+    if (match === null || !Number.isSafeInteger(Number(match[2])) || Number(match[2]) > 0xffffffff) throw new Error('Invalid lookup outpoint')
+    return { txid: match[1], outputIndex: Number(match[2]) }
+  }
+  const filter: Record<string, unknown> = {}
+  if (query.uhrpUrl !== undefined) {
+    if (typeof query.uhrpUrl !== 'string' || query.uhrpUrl.length > 256) throw new Error('Invalid UHRP URL')
+    filter.uhrpUrl = StorageUtils.getURLForHash(StorageUtils.getHashFromURL(query.uhrpUrl))
+  }
+  if (query.expiryTime !== undefined) {
+    if (typeof query.expiryTime !== 'number' || !Number.isSafeInteger(query.expiryTime) || query.expiryTime < 1) throw new Error('Invalid lookup expiry')
+    filter.expiryTime = query.expiryTime
+  }
+  if (query.hostIdentityKey !== undefined) {
+    if (typeof query.hostIdentityKey !== 'string' || !/^(?:02|03)[0-9a-f]{64}$/.test(query.hostIdentityKey)) throw new Error('Invalid host identity')
+    filter.hostIdentityKey = query.hostIdentityKey
+  }
+  if (Object.keys(filter).length === 0) throw new Error('Lookup requires a selector')
+  return filter
+}
