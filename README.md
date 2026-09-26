@@ -60,3 +60,9 @@ backend/
 ## License
 
 [Open BSV License](./LICENSE.txt)
+
+## Lookup compatibility and verification
+
+The lookup service accepts SDK pagination controls (`limit` up to 200, `offset` up to 1,000,000) separately from advertisement selectors. Results remain active-only and sort by outpoint for stable paging. Selectors are `uhrpUrl`, `hostIdentityKey`, `expiryTime`, or `outpoint`; database operators and unsupported fields are rejected. Legacy queries without pagination remain supported with a bounded default page.
+
+Run `npm ci --ignore-scripts` at the root and in `backend`, then `npm --prefix backend test`, `npm --prefix backend run lint`, and both dependency audits. Node 22/24 CI verifies real SDK signed-token admission, expiry rejection, paginated/legacy lookup compatibility, and malformed query rejection. Backend SDK/Overlay/MongoDB versions are pinned to a compatible published set; CARS builds the production Linux image on the cluster.

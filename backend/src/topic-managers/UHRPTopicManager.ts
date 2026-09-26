@@ -71,7 +71,7 @@ export default class UHRPTopicManager implements TopicManager {
         coinsToRetain: previousCoins,
         outputsToAdmit: outputs
       }
-    } catch (error) {
+    } catch {
       return {
         coinsToRetain: [],
         outputsToAdmit: []

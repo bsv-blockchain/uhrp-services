@@ -33,7 +33,7 @@ export const isTokenSignatureCorrectlyLinked = async (
         if (!valid) {
             return false
         }
-    } catch (e) {
+    } catch {
         return false
     }
 
