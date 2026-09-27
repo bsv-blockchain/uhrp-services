@@ -73,3 +73,14 @@ strict transaction validation. No database migration is required. CARS generates
 the surrounding server runtime independently; release acceptance must record
 its installed versions and verify live paginated discovery and fresh unconfirmed
 advertisements. Source tests alone do not establish a deployed CARS runtime.
+
+Backend 0.1.3 pins SDK 2.8.10 to verify normal WhatsOnChain block headers with
+their full metadata. SDK 2.8.8 rejected valid headers containing more than 16
+own fields before checking the Merkle root; the corrected finite limit is 64,
+matching the existing header-list bound. Merkle-root equality, response limits
+and accessor/symbol/prototype rejection remain enforced. Overlay 2.6.2 is
+unchanged; no database, token, proof or API migration is needed. Release through
+normal CARS only after the SDK's protected publication and registry integrity
+verification. Validate the installed generated runtime, two distinct Ready
+endpoints, endpoint withdrawal and real existing-transaction admission before
+accepting the complete restoration.
